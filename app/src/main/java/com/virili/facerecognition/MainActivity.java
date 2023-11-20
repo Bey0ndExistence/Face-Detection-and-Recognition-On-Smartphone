@@ -1,4 +1,4 @@
-package com.atharvakale.facerecognition;
+package com.virili.facerecognition;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -20,6 +20,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.YuvImage;
 import android.media.Image;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -54,8 +55,10 @@ import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LifecycleOwner;
 
+import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.text.InputType;
+import android.util.Log;
 import android.util.Pair;
 import android.util.Size;
 import android.view.View;
@@ -70,8 +73,10 @@ import android.widget.Toast;
 import org.tensorflow.lite.Interpreter;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -98,19 +103,18 @@ public class MainActivity extends AppCompatActivity {
     Button recognize,camera_switch, menu;
     ImageButton add_face;
     CameraSelector cameraSelector;
-    float distance= 1.0f;
     boolean start=true,flipX=false;
     boolean showDetected=false;
 
     boolean addFace=false;
     Context context=MainActivity.this;
     int cam_face=CameraSelector.LENS_FACING_BACK; //Default Back Camera
-    int OUTPUT_SIZE=192; //Output size of model
     ProcessCameraProvider cameraProvider;
     private static final int MY_CAMERA_REQUEST_CODE = 100;
 
     String modelFile="mobile_face_net.tflite"; //model name
 
+    Bitmap scaled;
     private HashMap<String, Bitmap> savedFaces = new HashMap<>(); //saved Faces
 
     @RequiresApi(api = Build.VERSION_CODES.M)
@@ -155,15 +159,53 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
+        menu.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                AlertDialog.Builder builder = new AlertDialog.Builder(context);
+                builder.setTitle("Select Action:");
 
+                // add a checkbox list
+                String[] names= {"Save image on disk"};
+
+                builder.setItems(names, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+
+                        switch (which)
+                        {
+                            case 0:
+                                saveFacesToGallery();
+                                break;
+
+                        }
+
+                    }
+                });
+
+
+                builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+
+                    }
+                });
+                builder.setNegativeButton("Cancel", null);
+
+                // create and show the alert dialog
+                AlertDialog dialog = builder.create();
+                dialog.show();
+            }
+        });
 
         add_face.setOnClickListener((new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                addFace=true;
+                addFace();
             }
-        }));
 
+
+        }));
 
         recognize.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -214,41 +256,88 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    private void saveFacesToGallery() {
+        // Check if the HashMap is not empty
+        if (!savedFaces.isEmpty()) {
+            for (Map.Entry<String, Bitmap> entry : savedFaces.entrySet()) {
+                String name = entry.getKey();
+                Bitmap bitmap = entry.getValue();
 
-    private void addFace(Bitmap scaled)
-    {
-        {
-
-            start=false;
-            AlertDialog.Builder builder = new AlertDialog.Builder(context);
-            builder.setTitle("Introduceti numele");
-
-                // Set up the input
-            final EditText input = new EditText(context);
-
-            input.setInputType(InputType.TYPE_CLASS_TEXT );
-            builder.setView(input);
-
-                // Set up the buttons
-            builder.setPositiveButton("ADD", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialog, int which) {
-                    savedFaces.put( input.getText().toString(), scaled);
-                    start=true;
-                    addFace=false;
-
-                }
-            });
-            builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialog, int which) {
-                    start=true;
-                    dialog.cancel();
-                }
-            });
-
-            builder.show();
+                // Save the Bitmap to a file with the name as a filename
+                saveBitmapToFile(name, bitmap);
+            }
+        } else {
+            // Handle the case when there are no faces saved
+            // You can show a message or perform any other action
         }
+    }
+    private void saveBitmapToFile(String fileName, Bitmap bitmap) {
+        // Get the directory where you want to save the images (e.g., external storage)
+        File directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+
+        // Create a new file with the specified name
+        File file = new File(directory, fileName + ".png");
+
+        try {
+            // Create a FileOutputStream to write the bitmap to the file
+            FileOutputStream fos = new FileOutputStream(file);
+
+            // Compress the bitmap to PNG format (you can choose other formats as well)
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos);
+
+            // Flush and close the stream
+            fos.flush();
+            fos.close();
+
+            // Optionally, you can add the saved file to the system's media store
+            MediaScannerConnection.scanFile(
+                    this,
+                    new String[]{file.toString()},
+                    null,
+                    (path, uri) -> {
+                        // Handle the scan completion if needed
+                    }
+            );
+
+            // Optionally, you can show a message indicating successful saving
+            Toast.makeText(this, "Saved: " + file.getAbsolutePath(), Toast.LENGTH_SHORT).show();
+        } catch (IOException e) {
+            // Handle the exception (e.g., show an error message)
+            e.printStackTrace();
+        }
+    }
+    private void addFace() {
+        start = false;
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle("Introduceti numele");
+
+        // Set up the input
+        final EditText input = new EditText(context);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        builder.setView(input);
+
+        // Set up the buttons
+        builder.setPositiveButton("ADD", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                savedFaces.put(input.getText().toString(), scaled);
+                start = true;  // Set start to true when the "ADD" button is clicked
+            }
+        });
+
+        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                start = true;
+                dialog.cancel();
+            }
+        });
+
+        // Set addFace to false only when the dialog is shown
+        addFace = false;
+
+        builder.show();
     }
 
     @Override
@@ -360,16 +449,12 @@ public class MainActivity extends AppCompatActivity {
                                                     if(flipX)
                                                         cropped_face = rotateBitmap(cropped_face, 0, flipX, false);
                                                     //Scale the acquired Face to 112*112 which is required input for model
-                                                    Bitmap scaled= getResizedBitmap(cropped_face, 112, 112);
+                                                    scaled= getResizedBitmap(cropped_face, 112, 112);
 
 
                                                     if(showDetected){
                                                         face_preview.setImageBitmap(scaled);
 
-                                                    }
-
-                                                    if(addFace){
-                                                        addFace(scaled);
                                                     }
 
 
@@ -562,143 +647,15 @@ public class MainActivity extends AppCompatActivity {
         return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
     }
 
-    //Save Faces to Shared Preferences.Conversion of Recognition objects to json string
-//    private void insertToSP(HashMap<String, SimilarityClassifier.Recognition> jsonMap,int mode) {
-//        if(mode==1)  //mode: 0:save all, 1:clear all, 2:update all
-//            jsonMap.clear();
-//        else if (mode==0)
-//            jsonMap.putAll(readFromSP());
-//        String jsonString = new Gson().toJson(jsonMap);
-////        for (Map.Entry<String, SimilarityClassifier.Recognition> entry : jsonMap.entrySet())
-////        {
-////            System.out.println("Entry Input "+entry.getKey()+" "+  entry.getValue().getExtra());
-////        }
-//        SharedPreferences sharedPreferences = getSharedPreferences("HashMap", MODE_PRIVATE);
-//        SharedPreferences.Editor editor = sharedPreferences.edit();
-//        editor.putString("map", jsonString);
-//        //System.out.println("Input josn"+jsonString.toString());
-//        editor.apply();
-//        Toast.makeText(context, "Recognitions Saved", Toast.LENGTH_SHORT).show();
-//    }
 
-    //Load Faces from Shared Preferences.Json String to Recognition object
-//    private HashMap<String, SimilarityClassifier.Recognition> readFromSP(){
-//        SharedPreferences sharedPreferences = getSharedPreferences("HashMap", MODE_PRIVATE);
-//        String defValue = new Gson().toJson(new HashMap<String, SimilarityClassifier.Recognition>());
-//        String json=sharedPreferences.getString("map",defValue);
-//       // System.out.println("Output json"+json.toString());
-//        TypeToken<HashMap<String,SimilarityClassifier.Recognition>> token = new TypeToken<HashMap<String,SimilarityClassifier.Recognition>>() {};
-//        HashMap<String,SimilarityClassifier.Recognition> retrievedMap=new Gson().fromJson(json,token.getType());
-//       // System.out.println("Output map"+retrievedMap.toString());
-//
-//        //During type conversion and save/load procedure,format changes(eg float converted to double).
-//        //So embeddings need to be extracted from it in required format(eg.double to float).
-//        for (Map.Entry<String, SimilarityClassifier.Recognition> entry : retrievedMap.entrySet())
-//        {
-//            float[][] output=new float[1][OUTPUT_SIZE];
-//            ArrayList arrayList= (ArrayList) entry.getValue().getExtra();
-//            arrayList = (ArrayList) arrayList.get(0);
-//            for (int counter = 0; counter < arrayList.size(); counter++) {
-//                output[0][counter]= ((Double) arrayList.get(counter)).floatValue();
-//            }
-//            entry.getValue().setExtra(output);
-//
-//            //System.out.println("Entry output "+entry.getKey()+" "+entry.getValue().getExtra() );
-//
-//        }
-////        System.out.println("OUTPUT"+ Arrays.deepToString(outut));
-//        Toast.makeText(context, "Recognitions Loaded", Toast.LENGTH_SHORT).show();
-//        return retrievedMap;
+//    private Bitmap getBitmapFromUri(Uri uri) throws IOException {
+//        ParcelFileDescriptor parcelFileDescriptor =
+//                getContentResolver().openFileDescriptor(uri, "r");
+//        FileDescriptor fileDescriptor = parcelFileDescriptor.getFileDescriptor();
+//        Bitmap image = BitmapFactory.decodeFileDescriptor(fileDescriptor);
+//        parcelFileDescriptor.close();
+//        return image;
 //    }
-
-    //Load Photo from phone storage
-//    private void loadphoto()
-//    {
-//        start=false;
-//        Intent intent = new Intent();
-//        intent.setType("image/*");
-//        intent.setAction(Intent.ACTION_GET_CONTENT);
-//        startActivityForResult(Intent.createChooser(intent, "Select Picture"), SELECT_PICTURE);
-//    }
-
-    //Similar Analyzing Procedure
-//    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-//        super.onActivityResult(requestCode, resultCode, data);
-//        if (resultCode == RESULT_OK) {
-//            if (requestCode == SELECT_PICTURE) {
-//                Uri selectedImageUri = data.getData();
-//                try {
-//                    InputImage impphoto=InputImage.fromBitmap(getBitmapFromUri(selectedImageUri),0);
-//                    detector.process(impphoto).addOnSuccessListener(new OnSuccessListener<List<Face>>() {
-//                        @Override
-//                        public void onSuccess(List<Face> faces) {
-//
-//                            if(faces.size()!=0) {
-//                                recognize.setText("Recognize");
-//                                add_face.setVisibility(View.VISIBLE);
-//                                reco_name.setVisibility(View.INVISIBLE);
-//                                face_preview.setVisibility(View.VISIBLE);
-//                                preview_info.setText("No face detected yet.\n");
-//                                Face face = faces.get(0);
-////                                System.out.println(face);
-//
-//                                //write code to recreate bitmap from source
-//                                //Write code to show bitmap to canvas
-//
-//                                Bitmap frame_bmp= null;
-//                                try {
-//                                    frame_bmp = getBitmapFromUri(selectedImageUri);
-//                                } catch (IOException e) {
-//                                    e.printStackTrace();
-//                                }
-//                                Bitmap frame_bmp1 = rotateBitmap(frame_bmp, 0, flipX, false);
-//
-//                                //face_preview.setImageBitmap(frame_bmp1);
-//
-//
-//                                RectF boundingBox = new RectF(face.getBoundingBox());
-//
-//
-//                                Bitmap cropped_face = getCropBitmapByCPU(frame_bmp1, boundingBox);
-//
-//                                Bitmap scaled = getResizedBitmap(cropped_face, 112, 112);
-//                                // face_preview.setImageBitmap(scaled);
-//
-//
-//                                addFace();
-////                                System.out.println(boundingBox);
-//                                try {
-//                                    Thread.sleep(100);
-//                                } catch (InterruptedException e) {
-//                                    e.printStackTrace();
-//                                }
-//                            }
-//                        }
-//                    }).addOnFailureListener(new OnFailureListener() {
-//                        @Override
-//                        public void onFailure(@NonNull Exception e) {
-//                            start=true;
-//                            Toast.makeText(context, "Failed to add", Toast.LENGTH_SHORT).show();
-//                        }
-//                    });
-//                    face_preview.setImageBitmap(getBitmapFromUri(selectedImageUri));
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                }
-//
-//
-//            }
-//        }
-//    }
-
-    private Bitmap getBitmapFromUri(Uri uri) throws IOException {
-        ParcelFileDescriptor parcelFileDescriptor =
-                getContentResolver().openFileDescriptor(uri, "r");
-        FileDescriptor fileDescriptor = parcelFileDescriptor.getFileDescriptor();
-        Bitmap image = BitmapFactory.decodeFileDescriptor(fileDescriptor);
-        parcelFileDescriptor.close();
-        return image;
-    }
 
 }
 

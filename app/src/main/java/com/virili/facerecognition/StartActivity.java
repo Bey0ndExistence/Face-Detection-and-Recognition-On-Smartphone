@@ -1,4 +1,4 @@
-package com.atharvakale.facerecognition;
+package com.virili.facerecognition;
 
 import android.content.Intent;
 import android.os.Bundle;

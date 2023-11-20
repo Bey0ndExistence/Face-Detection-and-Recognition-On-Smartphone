@@ -8,7 +8,7 @@ android {
 
 
     defaultConfig {
-        applicationId "com.atharvakale.facerecognition"
+        applicationId "com.virili.facerecognition"
         minSdkVersion 21
         targetSdkVersion 33
         versionCode 4

@@ -1,4 +1,4 @@
-package com.atharvakale.facerecognition;
+package com.virili.facerecognition;
 
 import androidx.appcompat.app.AppCompatActivity;
 
